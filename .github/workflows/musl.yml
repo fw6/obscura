@@ -1,0 +1,119 @@
+name: Low-glibc linux build
+
+# 目标：产物最低要求 glibc 2.31，在 AlmaLinux 9.3（glibc 2.34）可运行。
+# 为什么不是 musl：仓库 pin 的 v8 crate = 137.3.0，而 rusty_v8 从 v150 才开始发布
+# musl 静态库资产（v137.3.0 无 x86_64-unknown-linux-musl lib），musl 需从源码编 V8
+# （V8_FROM_SOURCE，数小时 + GN/ninja，CI 不可行）。故用 cargo-zigbuild 的
+# glibc 版本后缀目标，产出「glibc 最低 2.31」的动态链接二进制，满足 AlmaLinux 9.3。
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [musl-build]
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Install Zig
+        run: |
+          curl -fL -o /tmp/zig.tar.xz https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz
+          sudo mkdir -p /opt/zig
+          sudo tar -xJf /tmp/zig.tar.xz -C /opt/zig --strip-components=1
+          echo "/opt/zig" >> "$GITHUB_PATH"
+          /opt/zig/zig version
+
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild --locked
+
+      - name: Install build deps (cmake + clang for wreq/BoringSSL)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang libclang-dev llvm-dev perl
+
+      - name: Configure libclang
+        shell: bash
+        run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
+
+      - name: Build no-render
+        run: cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.31 -p obscura-cli --bins --no-default-features
+
+      - name: Stage no-render
+        run: |
+          BIN_DIR=$(ls -d target/x86_64-unknown-linux-gnu*/release | head -1)
+          [ -n "$BIN_DIR" ] || { echo "no target dir"; exit 1; }
+          mkdir -p dist/no-render && cp "$BIN_DIR"/obscura* dist/no-render/
+
+      - name: Build no-render-stealth
+        run: cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.31 -p obscura-cli --bins --no-default-features --features stealth
+
+      - name: Stage no-render-stealth
+        run: |
+          BIN_DIR=$(ls -d target/x86_64-unknown-linux-gnu*/release | head -1)
+          [ -n "$BIN_DIR" ] || { echo "no target dir"; exit 1; }
+          mkdir -p dist/no-render-stealth && cp "$BIN_DIR"/obscura* dist/no-render-stealth/
+
+      - name: Build default (render)
+        run: cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.31 -p obscura-cli --bins --features render
+
+      - name: Stage default
+        run: |
+          BIN_DIR=$(ls -d target/x86_64-unknown-linux-gnu*/release | head -1)
+          [ -n "$BIN_DIR" ] || { echo "no target dir"; exit 1; }
+          mkdir -p dist/default && cp "$BIN_DIR"/obscura* dist/default/
+
+      - name: Build stealth (render+stealth)
+        run: cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.31 -p obscura-cli --bins --features render,stealth
+
+      - name: Stage stealth
+        run: |
+          BIN_DIR=$(ls -d target/x86_64-unknown-linux-gnu*/release | head -1)
+          [ -n "$BIN_DIR" ] || { echo "no target dir"; exit 1; }
+          mkdir -p dist/stealth && cp "$BIN_DIR"/obscura* dist/stealth/
+
+      - name: Smoke test
+        run: |
+          for VARIANT in default stealth no-render no-render-stealth; do
+            BIN=dist/$VARIANT/obscura
+            "$BIN" fetch "data:text/html,<title>ok</title>" --eval "1+1"
+          done
+          for VARIANT in default stealth; do
+            BIN=dist/$VARIANT/obscura
+            "$BIN" fetch "data:text/html,<style>body{margin:0;background:%23123456}</style>" --screenshot smoke.png
+            test -s smoke.png && rm smoke.png
+          done
+
+      - name: Verify max glibc requirement (must be <= 2.34)
+        run: |
+          for VARIANT in default stealth no-render no-render-stealth; do
+            MAX=$(objdump -T dist/$VARIANT/obscura 2>/dev/null | grep -o 'GLIBC_[0-9.]*' | sort -V | tail -1)
+            echo "$VARIANT: max $MAX"
+          done
+
+      - name: Package
+        run: |
+          tar czf obscura-x86_64-linux-glibc2.31.tar.gz -C dist/default obscura obscura-worker
+          tar czf obscura-x86_64-linux-glibc2.31-stealth.tar.gz -C dist/stealth obscura obscura-worker
+          tar czf obscura-x86_64-linux-glibc2.31-no-render.tar.gz -C dist/no-render obscura obscura-worker
+          tar czf obscura-x86_64-linux-glibc2.31-no-render-stealth.tar.gz -C dist/no-render-stealth obscura obscura-worker
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: obscura-x86_64-linux-glibc2.31
+          path: |
+            *.tar.gz
+          if-no-files-found: error
+          retention-days: 7
