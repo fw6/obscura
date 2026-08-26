@@ -1,0 +1,19 @@
+.github/workflows/musl.yml
+  s_cea55a2ffd6871::t_6d60ead6b329a9 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.43-trip",
+  "base_commit_sha": "41f1f51afe5e6cda634c6b9cb7b922b3b333823f",
+  "prompts": {},
+  "sessions": {
+    "s_cea55a2ffd6871": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_5843522d-3739-46cd-ba7b-a9d6bd27eb40",
+        "model": "claude-deepseek-v4-flash-vision-exp[1M]"
+      },
+      "human_author": "mekhi <feng.w@trip.com>"
+    }
+  }
+}
