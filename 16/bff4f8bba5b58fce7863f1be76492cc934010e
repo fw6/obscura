@@ -1,0 +1,21 @@
+.github/workflows/musl.yml
+  s_cea55a2ffd6871::t_c0bf25bdcfef97 15-24,26-41,43,46,53,60,67,73
+  s_cea55a2ffd6871::t_e7b210ccef4a52 25,44-45,47-52,54-59,61-66,68-72,74-85
+  s_cea55a2ffd6871::t_b84c2c4df1bcbe 42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.43-trip",
+  "base_commit_sha": "16bff4f8bba5b58fce7863f1be76492cc934010e",
+  "prompts": {},
+  "sessions": {
+    "s_cea55a2ffd6871": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_5843522d-3739-46cd-ba7b-a9d6bd27eb40",
+        "model": "claude-deepseek-v4-flash-vision-exp[1M]"
+      },
+      "human_author": null
+    }
+  }
+}
