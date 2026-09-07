@@ -1,0 +1,19 @@
+.github/workflows/release-libc231.yml
+  s_ddc0587a317a94::t_c392372b2cd598 1-126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.43-trip",
+  "base_commit_sha": "d42f68ed07b07f95d77b49e28a4a58d8c7571ed0",
+  "prompts": {},
+  "sessions": {
+    "s_ddc0587a317a94": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_50be3108-b927-4c9d-8474-df28c308bb2f",
+        "model": "claude-DeepSeek-V4-Flash-0731[1M]"
+      },
+      "human_author": "mekhi <feng.w@trip.com>"
+    }
+  }
+}
