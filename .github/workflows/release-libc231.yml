@@ -1,5 +1,7 @@
 name: Release libc2.31
 
+# 目标：产物最低要求 glibc 2.31，在 AlmaLinux 9.3（glibc 2.34）可运行。
+# 用 cargo-zigbuild 的 glibc 版本后缀目标，产出「glibc 最低 2.31」的动态链接二进制。
 on:
   push:
     tags:
@@ -10,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -20,53 +22,64 @@ jobs:
         with:
           targets: x86_64-unknown-linux-gnu
 
-      - name: Install build dependencies
+      - name: Install Zig
+        run: |
+          curl -fL -o /tmp/zig.tar.xz https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz
+          sudo mkdir -p /opt/zig
+          sudo tar -xJf /tmp/zig.tar.xz -C /opt/zig --strip-components=1
+          echo "/opt/zig" >> "$GITHUB_PATH"
+          /opt/zig/zig version
+
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild --locked
+
+      - name: Install build deps (cmake + clang for wreq/BoringSSL)
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake clang libclang-dev llvm-dev binutils python3-pip
+          sudo apt-get install -y cmake clang libclang-dev llvm-dev perl binutils
 
-      # pip 方式安装 cargo-zigbuild 会同时安装 zig（ziglang 包）
-      - name: Install cargo-zigbuild and zig
-        run: pip3 install cargo-zigbuild
+      - name: Configure libclang
+        shell: bash
+        run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
 
-      - name: Build no-render release binary
+      - name: Build no-render
         run: cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.31 -p obscura-cli --bins --no-default-features
 
-      - name: Stage no-render release binary
+      - name: Stage no-render
         run: |
-          mkdir -p dist/no-render
-          cp target/x86_64-unknown-linux-gnu/release/obscura \
-             target/x86_64-unknown-linux-gnu/release/obscura-worker dist/no-render/
+          BIN_DIR=$(ls -d target/x86_64-unknown-linux-gnu*/release | head -1)
+          [ -n "$BIN_DIR" ] || { echo "no target dir"; exit 1; }
+          mkdir -p dist/no-render && cp "$BIN_DIR"/obscura* dist/no-render/
 
-      - name: Build no-render stealth release binary
+      - name: Build no-render-stealth
         run: cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.31 -p obscura-cli --bins --no-default-features --features stealth
 
-      - name: Stage no-render stealth release binary
+      - name: Stage no-render-stealth
         run: |
-          mkdir -p dist/no-render-stealth
-          cp target/x86_64-unknown-linux-gnu/release/obscura \
-             target/x86_64-unknown-linux-gnu/release/obscura-worker dist/no-render-stealth/
+          BIN_DIR=$(ls -d target/x86_64-unknown-linux-gnu*/release | head -1)
+          [ -n "$BIN_DIR" ] || { echo "no target dir"; exit 1; }
+          mkdir -p dist/no-render-stealth && cp "$BIN_DIR"/obscura* dist/no-render-stealth/
 
-      - name: Build default release binary
+      - name: Build default (render)
         run: cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.31 -p obscura-cli --bins --features render
 
-      - name: Stage default release binary
+      - name: Stage default
         run: |
-          mkdir -p dist/default
-          cp target/x86_64-unknown-linux-gnu/release/obscura \
-             target/x86_64-unknown-linux-gnu/release/obscura-worker dist/default/
+          BIN_DIR=$(ls -d target/x86_64-unknown-linux-gnu*/release | head -1)
+          [ -n "$BIN_DIR" ] || { echo "no target dir"; exit 1; }
+          mkdir -p dist/default && cp "$BIN_DIR"/obscura* dist/default/
 
-      - name: Build stealth release binary
+      - name: Build stealth (render+stealth)
         run: cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.31 -p obscura-cli --bins --features render,stealth
 
-      - name: Stage stealth release binary
+      - name: Stage stealth
         run: |
-          mkdir -p dist/stealth
-          cp target/x86_64-unknown-linux-gnu/release/obscura \
-             target/x86_64-unknown-linux-gnu/release/obscura-worker dist/stealth/
+          BIN_DIR=$(ls -d target/x86_64-unknown-linux-gnu*/release | head -1)
+          [ -n "$BIN_DIR" ] || { echo "no target dir"; exit 1; }
+          mkdir -p dist/stealth && cp "$BIN_DIR"/obscura* dist/stealth/
 
-      - name: Smoke test release binaries (V8 snapshot)
-        # 每个变体跑一次 V8 路径，防止发布带快照崩溃的二进制（同 release.yml 的 issue #290 检查）
+      - name: Smoke test
+        # 每个变体跑一次 V8 路径，防止发布带快照崩溃的二进制（issue #290）
         shell: bash
         run: |
           for VARIANT in default stealth no-render no-render-stealth; do
@@ -76,8 +89,7 @@ jobs:
           for VARIANT in default stealth; do
             BIN=dist/$VARIANT/obscura
             "$BIN" fetch "data:text/html,<style>body{margin:0;background:%23123456}</style>" --screenshot smoke.png
-            test -s smoke.png
-            rm smoke.png
+            test -s smoke.png && rm smoke.png
           done
           for VARIANT in no-render no-render-stealth; do
             BIN=dist/$VARIANT/obscura
@@ -88,19 +100,17 @@ jobs:
             test ! -e smoke.png
           done
 
-      - name: Verify glibc requirement (must be <= 2.31)
+      - name: Verify max glibc requirement (must be <= 2.31)
         shell: bash
         run: |
           for VARIANT in default stealth no-render no-render-stealth; do
             BIN=dist/$VARIANT/obscura
             MAX=$(objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1)
             echo "$VARIANT: max GLIBC symbol version = $MAX"
-            python3 - "$MAX" <<'PY'
-import sys
-ver = sys.argv[1].removeprefix("GLIBC_")
-if tuple(int(x) for x in ver.split(".")) > (2, 31):
-    sys.exit(f"ERROR: {sys.argv[1]} requires glibc > 2.31")
-PY
+            case "$MAX" in
+              GLIBC_2.0|GLIBC_2.1*|GLIBC_2.2*|GLIBC_2.30|GLIBC_2.31) ;;
+              *) echo "ERROR: $VARIANT requires $MAX (need <= GLIBC_2.31)" >&2; exit 1 ;;
+            esac
           done
 
       - name: Package
