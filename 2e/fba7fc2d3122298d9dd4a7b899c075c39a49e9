@@ -1,0 +1,19 @@
+.github/workflows/release-libc231.yml
+  s_ddc0587a317a94::t_169458a119a616 3-4,15,25-36,39,41-43,45,48,50-52,54,57,59-61,63,66,68-70,72,75,77-79,81-82,92,103,110-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.43-trip",
+  "base_commit_sha": "2efba7fc2d3122298d9dd4a7b899c075c39a49e9",
+  "prompts": {},
+  "sessions": {
+    "s_ddc0587a317a94": {
+      "agent_id": {
+        "tool": "zcode",
+        "id": "sess_50be3108-b927-4c9d-8474-df28c308bb2f",
+        "model": "claude-DeepSeek-V4-Flash-0731[1M]"
+      },
+      "human_author": "mekhi <feng.w@trip.com>"
+    }
+  }
+}
